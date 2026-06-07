@@ -7,31 +7,37 @@ on:
 
 jobs:
   build-windows:
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            name: x64
+            runner: windows-latest
+          - target: aarch64-pc-windows-msvc
+            name: arm64
+            runner: windows-latest
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          key: ${{ matrix.target }}
 
       - name: Build release
         working-directory: src-tauri
-        run: cargo build --release
-
-      - name: Show output
-        working-directory: src-tauri
-        run: |
-          dir target\release\*.exe
-          dir target\release\steam-box-client.exe
+        run: cargo build --release --target ${{ matrix.target }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: steam-box-client-windows
-          path: src-tauri/target/release/steam-box-client.exe
+          name: steam-box-${{ matrix.name }}
+          path: src-tauri/target/${{ matrix.target }}/release/steam-box-client.exe
           retention-days: 30
