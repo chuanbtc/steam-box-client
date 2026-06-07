@@ -15,6 +15,17 @@ pub struct AppState {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Fix WebView2 data directory BEFORE anything else
+    // Prevents "无法创建数据目录" error when running as admin
+    if std::env::var("WEBVIEW2_USER_DATA_FOLDER").is_err() {
+        let data_dir = dirs::data_local_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("SteamBox")
+            .join("EBWebView");
+        let _ = std::fs::create_dir_all(&data_dir);
+        std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", data_dir.to_string_lossy().to_string());
+    }
+
     // Allow overriding the API base URL via environment variable
     let api_base = std::env::var("STEAMBOX_API")
         .unwrap_or_else(|_| "https://steam-box.fntiyqznzg.workers.dev".to_string());
