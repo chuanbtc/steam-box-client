@@ -1,0 +1,47 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-config-schema/schema.json",
+  "productName": "Steam Box",
+  "version": "1.0.0",
+  "identifier": "com.steambox.app",
+  "build": {
+    "frontendDist": "./frontend",
+    "devUrl": "http://localhost:1420"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Steam Box",
+        "width": 850,
+        "height": 550,
+        "resizable": false,
+        "decorations": false,
+        "center": true,
+        "shadow": true,
+        "transparent": false,
+        "fullscreen": false,
+        "alwaysOnTop": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' https://*.workers.dev https://steam-box.fntiyqznzg.workers.dev"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["SimpChinese", "English"]
+      }
+    }
+  }
+}

@@ -1,0 +1,37 @@
+name: Build Windows Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Build release
+        working-directory: src-tauri
+        run: cargo build --release
+
+      - name: Show output
+        working-directory: src-tauri
+        run: |
+          dir target\release\*.exe
+          dir target\release\steam-box-client.exe
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: steam-box-client-windows
+          path: src-tauri/target/release/steam-box-client.exe
+          retention-days: 30

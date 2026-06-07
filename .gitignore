@@ -1,0 +1,5 @@
+src-tauri/target/
+src-tauri/.cargo/
+.DS_Store
+._*
+*.swp
