@@ -34,14 +34,15 @@ jobs:
 
       - name: Build with Tauri
         working-directory: src-tauri
-        run: cargo tauri build --target ${{ matrix.target }} --bundles none
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ""
+        run: cargo tauri build --target ${{ matrix.target }}
 
       - name: Find and upload exe
         shell: pwsh
         run: |
-          $exe = Get-ChildItem -Path src-tauri/target/${{ matrix.target }}/release -Filter "*.exe" | Where-Object { $_.Name -notmatch "build|deps" -and $_.Length -gt 1000000 } | Select-Object -First 1
+          # The standalone exe (not the NSIS installer)
+          $exe = Get-ChildItem -Path "src-tauri/target/${{ matrix.target }}/release" -Filter "Steam Box.exe" -ErrorAction SilentlyContinue
+          if(-not $exe) { $exe = Get-ChildItem -Path "src-tauri/target/${{ matrix.target }}/release" -Filter "steam-box*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 }
+          if(-not $exe) { $exe = Get-ChildItem -Path "src-tauri/target/${{ matrix.target }}/release" -Filter "*.exe" | Where-Object { $_.Length -gt 1000000 -and $_.Name -notmatch "deps" } | Select-Object -First 1 }
           Write-Host "Found: $($exe.FullName) ($($exe.Length) bytes)"
           Copy-Item $exe.FullName "steam-box-${{ matrix.name }}.exe"
 
