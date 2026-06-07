@@ -60,6 +60,8 @@ pub fn run() {
             commands::wipe_game,
             commands::get_steam_path,
             commands::get_status,
+            commands::minimize_window,
+            commands::close_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

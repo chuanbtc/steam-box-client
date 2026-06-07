@@ -617,15 +617,16 @@ async function unlockAll() {
   setProgress(0, '入库中...');
   try {
     const result = await invoke('unlock_all', {});
-    if (result && result.total) {
+    if (result && (result.total || result.written)) {
       logStatus(`入库完成: 共 ${result.total} 个游戏`, 'ok');
       setProgress(100, '入库完成');
       toast(`成功入库 ${result.total} 个游戏`, 'success');
     }
     return result;
   } catch (e) {
-    logStatus('一键入库失败: ' + (e.message || e), 'err');
-    toast('入库失败', 'error');
+    const errMsg = typeof e === 'string' ? e : (e.message || JSON.stringify(e));
+    logStatus('一键入库失败: ' + errMsg, 'err');
+    toast('入库失败: ' + errMsg, 'error');
     setProgress(0, '入库失败');
     throw e;
   } finally {
@@ -809,25 +810,31 @@ document.getElementById('settingsModal').addEventListener('click', function(e) {
    ======================================= */
 async function minimizeWindow() {
   try {
-    if (window.__TAURI__ && window.__TAURI__.window) {
-      const appWindow = window.__TAURI__.window.getCurrentWindow();
-      await appWindow.minimize();
+    const { getCurrentWindow } = window.__TAURI__.window;
+    if (getCurrentWindow) {
+      await getCurrentWindow().minimize();
+    } else {
+      // Tauri 2.x alternative path
+      const win = new window.__TAURI__.window.Window('main');
+      await win.minimize();
     }
   } catch (e) {
-    console.warn('minimize failed:', e);
+    console.warn('minimize:', e);
+    try { await invoke('minimize_window', {}); } catch {}
   }
 }
 
 async function closeWindow() {
   try {
-    if (window.__TAURI__ && window.__TAURI__.window) {
-      const appWindow = window.__TAURI__.window.getCurrentWindow();
-      await appWindow.close();
+    const { getCurrentWindow } = window.__TAURI__.window;
+    if (getCurrentWindow) {
+      await getCurrentWindow().close();
     } else {
-      window.close();
+      const win = new window.__TAURI__.window.Window('main');
+      await win.close();
     }
   } catch (e) {
-    window.close();
+    try { await invoke('close_window', {}); } catch { window.close(); }
   }
 }
 
