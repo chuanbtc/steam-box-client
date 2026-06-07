@@ -12,11 +12,9 @@ jobs:
         include:
           - target: x86_64-pc-windows-msvc
             name: x64
-            runner: windows-latest
           - target: aarch64-pc-windows-msvc
             name: arm64
-            runner: windows-latest
-    runs-on: ${{ matrix.runner }}
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -25,19 +23,31 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --locked
+
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
           key: ${{ matrix.target }}
 
-      - name: Build release
+      - name: Build with Tauri
         working-directory: src-tauri
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo tauri build --target ${{ matrix.target }} --bundles none
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""
+
+      - name: Find and upload exe
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path src-tauri/target/${{ matrix.target }}/release -Filter "*.exe" | Where-Object { $_.Name -notmatch "build|deps" -and $_.Length -gt 1000000 } | Select-Object -First 1
+          Write-Host "Found: $($exe.FullName) ($($exe.Length) bytes)"
+          Copy-Item $exe.FullName "steam-box-${{ matrix.name }}.exe"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: steam-box-${{ matrix.name }}
-          path: src-tauri/target/${{ matrix.target }}/release/steam-box-client.exe
+          path: steam-box-${{ matrix.name }}.exe
           retention-days: 30

@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "identifier": "com.steambox.app",
   "build": {
-    "frontendDist": "../src-tauri/frontend",
+    "frontendDist": "./frontend",
     "devUrl": "http://localhost:1420"
   },
   "app": {
