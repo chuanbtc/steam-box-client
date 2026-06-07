@@ -69,8 +69,10 @@ struct ApiRedeemResponse {
     success: Option<bool>,
     ok: Option<bool>,
     lua: Option<String>,
+    lua_b64: Option<String>,
     expiry: Option<String>,
     name: Option<String>,
+    appid: Option<String>,
     message: Option<String>,
     error: Option<String>,
 }
@@ -336,7 +338,7 @@ pub async fn activate_cdk(
 
     if is_success {
         // Decode and write Lua payload if present
-        if let Some(ref lua_b64) = api_resp.lua {
+        if let Some(lua_b64) = api_resp.lua_b64.as_ref().or(api_resp.lua.as_ref()) {
             let lua_bytes = base64::engine::general_purpose::STANDARD
                 .decode(lua_b64)
                 .map_err(|e| format!("Base64 decode error: {}", e))?;
@@ -476,7 +478,7 @@ pub async fn unlock_all(state: State<'_, AppState>) -> Result<UnlockProgress, St
                     let is_success =
                         api_resp.success.unwrap_or(false) || api_resp.ok.unwrap_or(false);
                     if is_success {
-                        if let Some(ref lua_b64) = api_resp.lua {
+                        if let Some(lua_b64) = api_resp.lua_b64.as_ref().or(api_resp.lua.as_ref()) {
                             match base64::engine::general_purpose::STANDARD.decode(lua_b64) {
                                 Ok(lua_bytes) => match String::from_utf8(lua_bytes) {
                                     Ok(lua_content) => {
@@ -563,7 +565,7 @@ pub async fn unlock_single(
     let is_success = api_resp.success.unwrap_or(false) || api_resp.ok.unwrap_or(false);
 
     if is_success {
-        if let Some(ref lua_b64) = api_resp.lua {
+        if let Some(lua_b64) = api_resp.lua_b64.as_ref().or(api_resp.lua.as_ref()) {
             let lua_bytes = base64::engine::general_purpose::STANDARD
                 .decode(lua_b64)
                 .map_err(|e| format!("Base64 decode error: {}", e))?;
