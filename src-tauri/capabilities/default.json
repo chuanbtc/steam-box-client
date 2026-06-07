@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/nicegui-org/nicegui/main/tauri_capabilities_schema.json",
+  "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default capabilities for Steam Box",
   "windows": ["main"],

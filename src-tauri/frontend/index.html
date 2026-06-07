@@ -37,6 +37,7 @@
   /* ===== Background ===== */
   .bg-layer{
     position:fixed;inset:0;z-index:0;
+    pointer-events:none;
     background:
       radial-gradient(ellipse at 20% 50%,rgba(156,39,176,0.15) 0%,transparent 60%),
       radial-gradient(ellipse at 80% 20%,rgba(224,64,251,0.08) 0%,transparent 50%),
@@ -68,7 +69,6 @@
     height:42px;padding:0 8px 0 12px;
     background:linear-gradient(180deg,rgba(26,26,46,0.95),rgba(15,15,26,0.98));
     border-bottom:1px solid var(--border);
-    -webkit-app-region:drag;app-region:drag;
   }
   .titlebar-input-group{
     display:flex;align-items:center;gap:6px;
@@ -82,6 +82,9 @@
   }
   .titlebar-input:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-glow)}
   .titlebar-input::placeholder{color:var(--text-muted)}
+  button,input,a{
+    -webkit-app-region:no-drag;app-region:no-drag;
+  }
 
   .btn-tb{
     height:28px;padding:0 12px;border:none;border-radius:6px;
@@ -95,7 +98,10 @@
   .btn-add:hover{filter:brightness(1.15);transform:translateY(-1px)}
   .btn-add:active{transform:translateY(0)}
 
-  .titlebar-spacer{flex:1}
+  .titlebar-spacer{
+    flex:1;align-self:stretch;
+    -webkit-app-region:drag;app-region:drag;
+  }
   .titlebar-controls{
     display:flex;align-items:center;gap:2px;
     -webkit-app-region:no-drag;app-region:no-drag;
@@ -163,6 +169,7 @@
     content:'';position:absolute;inset:0;
     background:linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent);
     transform:translateX(-100%);transition:transform 0.6s;
+    pointer-events:none;
   }
   .login-btn:hover::after{transform:translateX(100%)}
   .login-footer{margin-top:20px;font-size:11px;color:var(--text-muted)}
@@ -228,6 +235,7 @@
     content:'';position:absolute;right:0;top:-1px;bottom:-1px;width:20px;
     background:radial-gradient(circle at right,rgba(224,64,251,0.8),transparent);
     border-radius:50%;filter:blur(4px);
+    pointer-events:none;
   }
   @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 
@@ -245,6 +253,7 @@
     content:'';position:absolute;inset:0;opacity:0;
     background:linear-gradient(90deg,transparent,rgba(255,255,255,0.1),transparent);
     transition:opacity 0.3s;
+    pointer-events:none;
   }
   .btn-action:hover::before{opacity:1}
   .btn-action:active{transform:scale(0.98)}
@@ -360,7 +369,7 @@
       入库
     </button>
   </div>
-  <div class="titlebar-spacer"></div>
+  <div class="titlebar-spacer" data-tauri-drag-region></div>
   <div class="titlebar-controls">
     <button class="tb-ctrl" onclick="toggleSettings()" title="设置">
       <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1115.6 12 3.6 3.6 0 0112 15.6z"/></svg>
@@ -480,16 +489,53 @@
 /* =======================================
    TAURI IPC BRIDGE
    ======================================= */
-const invoke = (cmd, args = {}) => {
-  if (window.__TAURI__ && window.__TAURI__.core) {
-    // Add 15s timeout to prevent UI freeze
-    return Promise.race([
-      window.__TAURI__.core.invoke(cmd, args),
-      new Promise((_, reject) => setTimeout(() => reject(new Error(`${cmd} timeout (15s)`)), 15000))
-    ]);
+const COMMAND_TIMEOUTS = {
+  get_machine_code: 15000,
+  check_session: 15000,
+  activate_cdk: 30000,
+  unlock_single: 60000,
+  unlock_all: 10 * 60 * 1000,
+  repair: 180000,
+  wipe_game: 30000,
+  minimize_window: 5000,
+  close_window: 5000
+};
+
+function errorMessage(e) {
+  if (typeof e === 'string') return e;
+  if (e && typeof e.message === 'string') return e.message;
+  try { return JSON.stringify(e); } catch (_) { return String(e); }
+}
+
+const invoke = (cmd, args = {}, options = {}) => {
+  const tauriInvoke = window.__TAURI__?.core?.invoke;
+  if (!tauriInvoke) {
+    const err = new Error(`Tauri IPC 不可用: ${cmd} 只能在 Tauri 应用内调用`);
+    console.warn(`[IPC] ${cmd} blocked`, args, err);
+    return Promise.reject(err);
   }
-  console.warn(`[DEV] invoke("${cmd}",`, args, ') - Tauri not available');
-  return Promise.resolve(null);
+
+  const timeoutMs = options.timeoutMs ?? COMMAND_TIMEOUTS[cmd] ?? 30000;
+  console.debug(`[IPC] ${cmd} ->`, args);
+
+  let timer = null;
+  const call = tauriInvoke(cmd, args)
+    .then((result) => {
+      console.debug(`[IPC] ${cmd} <-`, result);
+      return result;
+    })
+    .catch((error) => {
+      console.error(`[IPC] ${cmd} failed`, error);
+      throw error;
+    });
+
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${cmd} timeout (${Math.round(timeoutMs / 1000)}s)`)), timeoutMs);
+  });
+
+  return Promise.race([call, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
 };
 
 /* =======================================
@@ -613,6 +659,7 @@ async function activateCDK(cdk) {
 
 // Unlock All Games
 async function unlockAll() {
+  console.debug('[UI] unlock all clicked');
   if (state.busy) return;
   state.busy = true;
   const btn = document.getElementById('btnUnlockAll');
@@ -621,14 +668,22 @@ async function unlockAll() {
   setProgress(0, '入库中...');
   try {
     const result = await invoke('unlock_all', {});
-    if (result && (result.total || result.written)) {
-      logStatus(`入库完成: 共 ${result.total} 个游戏`, 'ok');
-      setProgress(100, '入库完成');
-      toast(`成功入库 ${result.total} 个游戏`, 'success');
+    if (!result) {
+      throw new Error('unlock_all 未返回结果');
     }
+    const total = Number(result.total || 0);
+    const written = Number(result.written || 0);
+    const skipped = Number(result.skipped || 0);
+    const errors = Array.isArray(result.errors) ? result.errors : [];
+    logStatus(`入库完成: 共 ${total} 个游戏，写入 ${written}，跳过 ${skipped}`, written > 0 ? 'ok' : 'info');
+    if (errors.length) {
+      logStatus(`入库错误 ${errors.length} 个: ${errors.slice(0, 3).join(' | ')}`, 'err');
+    }
+    setProgress(100, '入库完成');
+    toast(written > 0 ? `成功写入 ${written} 个游戏` : '没有写入游戏，请查看日志', written > 0 ? 'success' : 'info');
     return result;
   } catch (e) {
-    const errMsg = typeof e === 'string' ? e : (e.message || JSON.stringify(e));
+    const errMsg = errorMessage(e);
     logStatus('一键入库失败: ' + errMsg, 'err');
     toast('入库失败: ' + errMsg, 'error');
     setProgress(0, '入库失败');
@@ -641,6 +696,7 @@ async function unlockAll() {
 
 // Unlock Single Game
 async function unlockSingle(appid) {
+  console.debug('[UI] unlock single clicked', appid);
   if (!appid) {
     toast('请输入AppID', 'error');
     return;
@@ -662,7 +718,7 @@ async function unlockSingle(appid) {
     }
     return result;
   } catch (e) {
-    logStatus(`入库失败: ${e.message || e}`, 'err');
+    logStatus(`入库失败: ${errorMessage(e)}`, 'err');
     toast('入库失败', 'error');
     setProgress(0, '入库失败');
     throw e;
@@ -673,6 +729,7 @@ async function unlockSingle(appid) {
 
 // Repair
 async function repair() {
+  console.debug('[UI] repair clicked');
   if (state.busy) return;
   state.busy = true;
   const btn = document.getElementById('btnRepair');
@@ -681,12 +738,19 @@ async function repair() {
   setProgress(0, '修复中...');
   try {
     const result = await invoke('repair', {});
-    logStatus('修复完成', 'ok');
-    setProgress(100, '修复完成');
-    toast('修复成功', 'success');
+    if (result?.success) {
+      logStatus(`修复完成: 写入 ${result.files_written || 0} 个文件`, 'ok');
+      setProgress(100, '修复完成');
+      toast('修复成功', 'success');
+    } else {
+      const msg = result?.message || '修复未写入文件';
+      logStatus('修复未完成: ' + msg, 'err');
+      setProgress(0, '修复失败');
+      toast(msg, 'error');
+    }
     return result;
   } catch (e) {
-    logStatus('修复失败: ' + (e.message || e), 'err');
+    logStatus('修复失败: ' + errorMessage(e), 'err');
     toast('修复失败', 'error');
     setProgress(0, '修复失败');
     throw e;
@@ -698,6 +762,7 @@ async function repair() {
 
 // Wipe Game
 async function wipeGame(appid) {
+  console.debug('[UI] wipe clicked', appid);
   if (!appid) {
     toast('请输入AppID', 'error');
     return;
@@ -716,7 +781,7 @@ async function wipeGame(appid) {
     }
     return result;
   } catch (e) {
-    logStatus('擦除失败: ' + (e.message || e), 'err');
+    logStatus('擦除失败: ' + errorMessage(e), 'err');
     toast('擦除失败', 'error');
     throw e;
   } finally {
@@ -728,6 +793,7 @@ async function wipeGame(appid) {
    UI HANDLERS
    ======================================= */
 async function handleActivate() {
+  console.debug('[UI] activate clicked');
   const btn = document.getElementById('activateBtn');
   const spinner = document.getElementById('activateSpinner');
   const btnText = document.getElementById('activateBtnText');
@@ -749,10 +815,12 @@ async function handleActivate() {
 }
 
 function handleUnlockAll() {
+  console.debug('[UI] handleUnlockAll');
   unlockAll();
 }
 
 function handleUnlockSingleBtn() {
+  console.debug('[UI] handleUnlockSingleBtn');
   const appid = document.getElementById('appIdInput').value.trim();
   if (!appid) {
     toast('请先在顶部输入AppID', 'error');
@@ -763,10 +831,12 @@ function handleUnlockSingleBtn() {
 }
 
 function handleRepair() {
+  console.debug('[UI] handleRepair');
   repair();
 }
 
 function handleWipe() {
+  console.debug('[UI] handleWipe');
   const appid = document.getElementById('appIdInput').value.trim();
   if (!appid) {
     toast('请先输入要擦除的AppID', 'error');
@@ -777,6 +847,7 @@ function handleWipe() {
 }
 
 function handleAddSingle() {
+  console.debug('[UI] handleAddSingle');
   const appid = document.getElementById('appIdInput').value.trim();
   if (!appid) {
     toast('请先输入AppID', 'error');
@@ -812,12 +883,49 @@ document.getElementById('settingsModal').addEventListener('click', function(e) {
 /* =======================================
    WINDOW CONTROLS (Tauri)
    ======================================= */
-function minimizeWindow() {
-  try { window.__TAURI__.core.invoke('minimize_window', {}); } catch(e) { console.warn(e); }
+function currentTauriWindow() {
+  return window.__TAURI__?.window?.getCurrentWindow?.() || null;
 }
 
-function closeWindow() {
-  try { window.__TAURI__.core.invoke('close_window', {}); } catch(e) { window.close(); }
+async function minimizeWindow() {
+  console.debug('[UI] minimize clicked');
+  try {
+    const appWindow = currentTauriWindow();
+    if (appWindow?.minimize) {
+      await appWindow.minimize();
+      return;
+    }
+  } catch (e) {
+    console.warn('[WINDOW] direct minimize failed, falling back to command', e);
+  }
+
+  try {
+    await invoke('minimize_window', {}, { timeoutMs: 5000 });
+  } catch (e) {
+    console.warn('[WINDOW] minimize failed', e);
+    toast('最小化失败: ' + errorMessage(e), 'error');
+  }
+}
+
+async function closeWindow() {
+  console.debug('[UI] close clicked');
+  try {
+    const appWindow = currentTauriWindow();
+    if (appWindow?.close) {
+      await appWindow.close();
+      return;
+    }
+  } catch (e) {
+    console.warn('[WINDOW] direct close failed, falling back to command', e);
+  }
+
+  try {
+    await invoke('close_window', {}, { timeoutMs: 5000 });
+  } catch (e) {
+    console.warn('[WINDOW] close failed', e);
+    toast('关闭失败: ' + errorMessage(e), 'error');
+    window.close();
+  }
 }
 
 /* =======================================
