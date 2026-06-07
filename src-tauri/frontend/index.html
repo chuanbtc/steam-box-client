@@ -482,7 +482,11 @@
    ======================================= */
 const invoke = (cmd, args = {}) => {
   if (window.__TAURI__ && window.__TAURI__.core) {
-    return window.__TAURI__.core.invoke(cmd, args);
+    // Add 15s timeout to prevent UI freeze
+    return Promise.race([
+      window.__TAURI__.core.invoke(cmd, args),
+      new Promise((_, reject) => setTimeout(() => reject(new Error(`${cmd} timeout (15s)`)), 15000))
+    ]);
   }
   console.warn(`[DEV] invoke("${cmd}",`, args, ') - Tauri not available');
   return Promise.resolve(null);
@@ -808,34 +812,12 @@ document.getElementById('settingsModal').addEventListener('click', function(e) {
 /* =======================================
    WINDOW CONTROLS (Tauri)
    ======================================= */
-async function minimizeWindow() {
-  try {
-    const { getCurrentWindow } = window.__TAURI__.window;
-    if (getCurrentWindow) {
-      await getCurrentWindow().minimize();
-    } else {
-      // Tauri 2.x alternative path
-      const win = new window.__TAURI__.window.Window('main');
-      await win.minimize();
-    }
-  } catch (e) {
-    console.warn('minimize:', e);
-    try { await invoke('minimize_window', {}); } catch {}
-  }
+function minimizeWindow() {
+  try { window.__TAURI__.core.invoke('minimize_window', {}); } catch(e) { console.warn(e); }
 }
 
-async function closeWindow() {
-  try {
-    const { getCurrentWindow } = window.__TAURI__.window;
-    if (getCurrentWindow) {
-      await getCurrentWindow().close();
-    } else {
-      const win = new window.__TAURI__.window.Window('main');
-      await win.close();
-    }
-  } catch (e) {
-    try { await invoke('close_window', {}); } catch { window.close(); }
-  }
+function closeWindow() {
+  try { window.__TAURI__.core.invoke('close_window', {}); } catch(e) { window.close(); }
 }
 
 /* =======================================
